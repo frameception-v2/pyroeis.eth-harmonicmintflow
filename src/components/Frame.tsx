@@ -7,29 +7,82 @@ import sdk, {
   type Context,
 } from "@farcaster/frame-sdk";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "~/components/ui/card";
-
+import { Button } from "~/components/ui/button";
 import { config } from "~/components/providers/WagmiProvider";
 import { PurpleButton } from "~/components/ui/PurpleButton";
 import { truncateAddress } from "~/lib/truncateAddress";
-import { base, optimism } from "wagmi/chains";
+import { base, optimism, zora } from "wagmi/chains";
+import { useContractWrite, useWaitForTransactionReceipt } from "wagmi";
+import { ZORA_MINT_CONTRACT, ZORA_CHAIN_ID } from "~/lib/constants";
+import { useAccount } from "wagmi";
+import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { createStore } from "mipd";
 import { Label } from "~/components/ui/label";
 import { PROJECT_TITLE } from "~/lib/constants";
 
-function ExampleCard() {
+function MintCard({ context }: { context: Context.FrameContext | undefined }) {
+  const { address } = useAccount();
+  const { data: hash, writeContract, isPending } = useContractWrite();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ 
+    hash,
+    chainId: ZORA_CHAIN_ID
+  });
+
+  const canMint = context?.interactor?.viewerContext?.liked && 
+                 context?.interactor?.viewerContext?.following;
+
+  const handleMint = async () => {
+    if (!canMint) return;
+    
+    writeContract({
+      address: ZORA_MINT_CONTRACT,
+      abi: [
+        {
+          name: "mint",
+          type: "function",
+          stateMutability: "payable",
+          inputs: [],
+          outputs: [],
+        },
+      ] as const,
+      functionName: "mint",
+      chainId: ZORA_CHAIN_ID,
+      value: BigInt(0) // Free mint
+    });
+  };
+
   return (
     <Card className="border-neutral-200 bg-white">
       <CardHeader>
-        <CardTitle className="text-neutral-900">Welcome to the Frame Template</CardTitle>
+        <CardTitle className="text-neutral-900">Mint Your Frame</CardTitle>
         <CardDescription className="text-neutral-600">
-          This is an example card that you can customize or remove
+          {canMint 
+            ? "You're eligible to mint!"
+            : "Like & follow to unlock minting"}
         </CardDescription>
       </CardHeader>
-      <CardContent className="text-neutral-800">
-        <p>
-          Your frame content goes here. The text is intentionally dark to ensure good readability.
-        </p>
+      <CardContent className="flex flex-col gap-4 text-neutral-800">
+        <div className="flex flex-col gap-2">
+          <Label>Status:</Label>
+          {isPending && <span>Confirming in wallet...</span>}
+          {isConfirming && <span>Transaction pending...</span>}
+          {isConfirmed && <span>Mint successful!</span>}
+        </div>
+        
+        <Button 
+          onClick={handleMint}
+          disabled={!canMint || isPending}
+          className="w-full"
+        >
+          {isPending ? "Minting..." : "Mint Frame"}
+        </Button>
+
+        {address && (
+          <div className="text-sm text-neutral-600">
+            Connected: {truncateAddress(address)}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -137,7 +190,7 @@ export default function Frame(
     >
       <div className="w-[300px] mx-auto py-2 px-2">
         <h1 className="text-2xl font-bold text-center mb-4 text-neutral-900">{title}</h1>
-        <ExampleCard />
+        <MintCard context={context} />
       </div>
     </div>
   );
